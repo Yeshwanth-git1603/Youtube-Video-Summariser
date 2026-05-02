@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Video Summarizer",
+  "version": "1.0",
+  "description": "Summarizes YouTube videos using AI.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "*://*.youtube.com/*",
+    "http://localhost:3000/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.youtube.com/watch*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_end"
+    }
+  ],
+  "commands": {
+    "toggle_sidebar": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      },
+      "description": "Toggle Video Summarizer Sidebar"
+    }
+  }
+}
