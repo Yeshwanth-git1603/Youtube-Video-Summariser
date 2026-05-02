@@ -10,7 +10,7 @@
   ],
   "host_permissions": [
     "*://*.youtube.com/*",
-    "http://localhost:3000/*"
+    "https://youtube-video-summariser-ten.vercel.app/*"
   ],
   "background": {
     "service_worker": "background.js"

@@ -22,7 +22,7 @@ chrome.commands.onCommand.addListener(async (command) => {
 // Listen for fetch requests from content script to avoid Mixed Content errors
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'FETCH_SUMMARY') {
-    fetch('http://localhost:3000/summarize', {
+    fetch('https://youtube-video-summariser-ten.vercel.app/summarize', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
