@@ -79,6 +79,38 @@ function getMetaData() {
   return { title, channel };
 }
 
+async function fetchTranscriptClientSide(videoId) {
+  try {
+    const response = await fetch(`https://www.youtube.com/watch?v=${videoId}`);
+    const html = await response.text();
+    
+    const captionMatch = html.match(/"captions":\s*(\{.*?"captionTracks":\s*\[.*?\].*?\})/s);
+    if (!captionMatch) throw new Error('No captions found');
+    
+    const tracksMatch = html.match(/"captionTracks":\s*(\[.*?\])/s);
+    const captionTracks = JSON.parse(tracksMatch[1]);
+    
+    // prefer manual over auto-generated
+    let selectedTrack = captionTracks.find(t => t.kind !== 'asr') || captionTracks[0];
+    
+    const xmlResponse = await fetch(selectedTrack.baseUrl);
+    const xml = await xmlResponse.text();
+    
+    const textSegments = [];
+    const regex = /<text[^>]*>([\s\S]*?)<\/text>/g;
+    let match;
+    while ((match = regex.exec(xml)) !== null) {
+      let text = match[1].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\n/g, ' ').trim();
+      if (text) textSegments.push(text);
+    }
+    
+    return textSegments.join(' ');
+  } catch (error) {
+    console.error("Client side transcript fetch error:", error);
+    throw new Error("No transcript available for this video, or captions are disabled.");
+  }
+}
+
 async function summarizeVideo() {
   if (isProcessing) return;
   
@@ -103,9 +135,13 @@ async function summarizeVideo() {
   isProcessing = true;
 
   try {
+    // 1. Fetch transcript directly from the browser to bypass bot-blocking
+    const transcript = await fetchTranscriptClientSide(videoId);
+
+    // 2. Send transcript + metadata to background script (which forwards to backend)
     const response = await chrome.runtime.sendMessage({
       action: 'FETCH_SUMMARY',
-      payload: { videoId, title, channel }
+      payload: { videoId, title, channel, transcript }
     });
 
     if (!response.success) {

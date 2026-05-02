@@ -4,92 +4,6 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-/**
- * Fetches YouTube transcript directly using YouTube's internal API.
- * More reliable than libraries on cloud/serverless platforms.
- */
-async function fetchTranscript(videoId) {
-  // Step 1: Fetch the YouTube video page to get caption track info
-  const videoPageUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  const pageResponse = await fetch(videoPageUrl, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept-Language': 'en-US,en;q=0.9',
-    }
-  });
-
-  if (!pageResponse.ok) {
-    throw new Error('Failed to fetch YouTube video page');
-  }
-
-  const pageHtml = await pageResponse.text();
-
-  // Step 2: Extract captions player response JSON
-  const captionMatch = pageHtml.match(/"captions":\s*(\{.*?"captionTracks":\s*\[.*?\].*?\})/s);
-  if (!captionMatch) {
-    throw new Error('No captions found for this video');
-  }
-
-  // Extract the captionTracks array
-  const tracksMatch = pageHtml.match(/"captionTracks":\s*(\[.*?\])/s);
-  if (!tracksMatch) {
-    throw new Error('No caption tracks found');
-  }
-
-  let captionTracks;
-  try {
-    captionTracks = JSON.parse(tracksMatch[1]);
-  } catch (e) {
-    throw new Error('Failed to parse caption tracks');
-  }
-
-  if (!captionTracks || captionTracks.length === 0) {
-    throw new Error('No caption tracks available');
-  }
-
-  // Step 3: Pick the best caption track (prefer manual captions, then auto-generated)
-  let selectedTrack = captionTracks.find(t => t.kind !== 'asr') || captionTracks[0];
-  let captionUrl = selectedTrack.baseUrl;
-
-  // Step 4: Fetch the actual transcript XML
-  const captionResponse = await fetch(captionUrl, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    }
-  });
-
-  if (!captionResponse.ok) {
-    throw new Error('Failed to fetch caption data');
-  }
-
-  const captionXml = await captionResponse.text();
-
-  // Step 5: Parse the XML to extract text
-  const textSegments = [];
-  const regex = /<text[^>]*>([\s\S]*?)<\/text>/g;
-  let match;
-  while ((match = regex.exec(captionXml)) !== null) {
-    // Decode HTML entities
-    let text = match[1]
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/\n/g, ' ')
-      .trim();
-    if (text) {
-      textSegments.push(text);
-    }
-  }
-
-  if (textSegments.length === 0) {
-    throw new Error('Transcript is empty');
-  }
-
-  return textSegments.join(' ');
-}
-
 module.exports = async function handler(req, res) {
   // Handle CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -104,21 +18,14 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { videoId, title, channel } = req.body;
+  const { videoId, title, channel, transcript } = req.body;
 
-  if (!videoId) {
-    return res.status(400).json({ error: 'videoId is required' });
+  if (!transcript || transcript.trim() === '') {
+    return res.status(400).json({ error: 'Transcript is required' });
   }
 
   try {
-    // 1. Fetch transcript using our custom fetcher
-    let fullTranscript;
-    try {
-      fullTranscript = await fetchTranscript(videoId);
-    } catch (e) {
-      console.error('Transcript fetch error:', e.message);
-      return res.status(404).json({ error: 'No transcript available for this video, or captions are disabled.' });
-    }
+    const fullTranscript = transcript;
 
     // 2. Prepare OpenAI prompt
     const systemPrompt = `
